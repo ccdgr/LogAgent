@@ -43,3 +43,6 @@ tmp/
 GEMINI.md
 CLAUDE.md
 docs/
+
+# CONFIG
+config.yaml
