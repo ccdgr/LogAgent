@@ -1,0 +1,8 @@
+server:
+  port: ":8080"
+database:
+  mysql: "root:root123@tcp(127.0.0.1:3306)/log_agent?charset=utf8mb4&parseTime=True&loc=Local"
+  redis: "127.0.0.1:6379"
+deepseek:
+  api_key: "sk-edf87c517bff4e3f807a129842417f91"
+  base_url: "https://api.deepseek.com"

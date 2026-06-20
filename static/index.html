@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Go-LogAgent | 智能日志诊断系统</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body { background-color: #f4f7f6; }
+        .navbar { box-shadow: 0 2px 4px rgba(0,0,0,.08); }
+        .main-content { padding-top: 80px; padding-bottom: 40px; }
+        .diagnostic-card { border-left: 5px solid #0d6efd; }
+        .log-terminal { background-color: #1e1e1e; color: #d4d4d4; padding: 1.2rem; border-radius: 6px; font-family: 'Consolas', monospace; font-size: 0.85rem; height: 480px; overflow-y: auto; line-height: 1.6; }
+        .status-badge { font-size: 0.7rem; padding: 0.2rem 0.5rem; }
+        .table-responsive { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+        .cursor-pointer { cursor: pointer; }
+        .nav-link { font-weight: 500; transition: all 0.2s; border-bottom: 2px solid transparent; margin: 0 10px; }
+        .nav-link.active { color: #fff !important; border-bottom: 2px solid #0d6efd; }
+        .card { border: none; box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075); }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+            <a class="navbar-brand fw-bold me-4" href="#"><i class="bi bi-robot me-2 text-primary"></i>Go-LogAgent</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="#" id="menu-diag" onclick="switchPage('diag')">智能诊断</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" id="menu-history" onclick="switchPage('history')">排查历史</a>
+                    </li>
+                </ul>
+                <div class="ms-auto d-flex align-items-center">
+                    <div class="small text-white-50"><i class="bi bi-person-circle me-1"></i>Administrator</div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <div class="container">
+            <!-- 1. 诊断页面 -->
+            <section id="diag-section">
+                <div class="row g-4">
+                    <div class="col-lg-4">
+                        <div class="card h-100">
+                            <div class="card-body p-4">
+                                <h5 class="card-title mb-4 fw-bold">发起诊断任务</h5>
+                                <form id="taskForm">
+                                    <div class="mb-4">
+                                        <label class="form-label text-muted small fw-bold">故障描述</label>
+                                        <textarea class="form-control bg-light border-0" id="problemDesc" rows="8" placeholder="例如：系统刚才出现大量 500 错误，帮我分析下原因。"></textarea>
+                                    </div>
+                                    <button type="submit" class="btn btn-primary w-100 py-2 fw-bold" id="submitBtn">
+                                        <i class="bi bi-lightning-charge-fill me-1"></i>立即开始诊断
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-8">
+                        <!-- Welcome Guide -->
+                        <div id="welcomeGuide" class="card border-0 shadow-sm p-5 text-center bg-white h-100 d-flex flex-column justify-content-center">
+                            <div class="py-5">
+                                <i class="bi bi-clipboard2-pulse display-1 text-body-tertiary"></i>
+                                <h4 class="mt-4 text-secondary fw-bold">Agent 待命</h4>
+                                <p class="text-muted mx-auto" style="max-width: 400px;">输入故障现象后，Agent 将自动扫描本地日志资产，并基于 DeepSeek 进行深度推理诊断。</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Status Card (Hidden by default using d-none) -->
+                        <div id="statusCard" class="card border-0 shadow-sm diagnostic-card h-100 d-none">
+                            <div class="card-body p-4">
+                                <div class="d-flex justify-content-between align-items-center mb-4">
+                                    <div>
+                                        <h5 class="card-title mb-1 fw-bold">诊断执行详情</h5>
+                                        <small class="text-muted">Task ID: <span id="displayTaskId" class="font-monospace"></span></small>
+                                    </div>
+                                    <span class="badge bg-primary rounded-pill status-badge" id="taskStatus">RUNNING</span>
+                                </div>
+                                
+                                <div class="progress mb-4" style="height: 4px;">
+                                    <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 100%"></div>
+                                </div>
+
+                                <div class="log-terminal" id="logTerminal"></div>
+
+                                <div id="finalReport" class="mt-4" style="display: none;">
+                                    <div class="p-4 rounded-3 border-start border-4 border-success bg-success bg-opacity-10">
+                                        <h6 class="fw-bold text-success mb-2"><i class="bi bi-check-circle-fill me-2"></i>最终诊断结论</h6>
+                                        <div id="reportContent" class="small lh-lg text-dark"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 2. 历史页面 -->
+            <section id="history-section" class="d-none">
+                <div class="card shadow-sm">
+                    <div class="card-body p-4">
+                        <div class="d-flex justify-content-between align-items-center mb-4">
+                            <h5 class="fw-bold mb-0">排查历史记录</h5>
+                            <div class="input-group input-group-sm" style="width: 350px;">
+                                <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                                <input type="text" id="searchInput" class="form-control border-start-0 ps-0" placeholder="搜索问题关键字（回车确认）..." onkeyup="if(event.keyCode==13)searchHistory()">
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr class="small text-muted text-uppercase">
+                                        <th class="ps-4 py-3">提交时间</th>
+                                        <th>故障描述</th>
+                                        <th>执行状态</th>
+                                        <th>结论摘要</th>
+                                        <th class="text-end pe-4">管理操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="historyTableBody" class="small"></tbody>
+                            </table>
+                        </div>
+
+                        <div class="mt-4 d-flex justify-content-between align-items-center">
+                            <small class="text-muted" id="totalCount">共 0 条记录</small>
+                            <nav><ul class="pagination pagination-sm mb-0" id="pagination"></ul></nav>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Task Detail Modal -->
+    <div class="modal fade" id="detailModal" tabindex="-1">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header border-0 bg-dark text-white">
+                    <h5 class="modal-title fw-bold">诊断详情回顾: <span id="modalTaskId" class="font-monospace small"></span></h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4 bg-light">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <div class="card h-100 shadow-sm">
+                                <div class="card-body">
+                                    <h6 class="fw-bold mb-3 border-bottom pb-2 text-primary">基础信息</h6>
+                                    <p class="small mb-1 text-muted fw-bold">故障描述:</p>
+                                    <p class="small mb-3 text-dark bg-white p-2 rounded" id="modalDesc"></p>
+                                    <p class="small mb-1 text-muted fw-bold">当前状态:</p>
+                                    <div id="modalStatusContainer" class="mb-3"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-8">
+                            <div class="card shadow-sm">
+                                <div class="card-body p-3">
+                                    <h6 class="fw-bold mb-3 border-bottom pb-2 text-primary">全量推理轨迹</h6>
+                                    <div class="log-terminal" id="modalLogTerminal" style="height: 500px;"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let currentPage = 1;
+        let currentSearch = "";
+
+        function switchPage(page) {
+            document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+            document.getElementById(`menu-${page}`).classList.add('active');
+            if(page === 'diag') {
+                document.getElementById('diag-section').classList.remove('d-none');
+                document.getElementById('history-section').classList.add('d-none');
+            } else {
+                document.getElementById('diag-section').classList.add('d-none');
+                document.getElementById('history-section').classList.remove('d-none');
+                loadHistory(1);
+            }
+        }
+
+        function loadHistory(page, query = "") {
+            currentPage = page;
+            currentSearch = query;
+            fetch(`/api/tasks?page=${page}&size=10&q=${query}`)
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('totalCount').innerText = `共 ${data.total} 条记录`;
+                    const tbody = document.getElementById('historyTableBody');
+                    tbody.innerHTML = '';
+                    if (!data.items || data.items.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-5 text-muted">未找到匹配的排查任务</td></tr>';
+                        return;
+                    }
+                    data.items.forEach(task => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td class="ps-4 text-muted">${new Date(task.created_at).toLocaleString()}</td>
+                            <td class="fw-bold text-dark"><div class="text-truncate" style="max-width:250px;">${task.description}</div></td>
+                            <td><span class="badge ${task.status === 'success' ? 'bg-success' : 'bg-primary'} bg-opacity-75 rounded-pill">${task.status.toUpperCase()}</span></td>
+                            <td class="text-muted"><div class="text-truncate" style="max-width:200px;">${task.result || '-'}</div></td>
+                            <td class="text-end pe-4">
+                                <button class="btn btn-sm btn-outline-primary me-1" onclick="viewDetail('${task.id}')" title="详情"><i class="bi bi-eye"></i></button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="deleteTask('${task.id}')" title="删除"><i class="bi bi-trash"></i></button>
+                            </td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                    renderPagination(data.total, data.page, data.size);
+                });
+        }
+
+        function renderPagination(total, page, size) {
+            const pages = Math.ceil(total / size);
+            const ul = document.getElementById('pagination');
+            ul.innerHTML = '';
+            for (let i = 1; i <= pages; i++) {
+                const li = document.createElement('li');
+                li.className = `page-item ${i === page ? 'active' : ''}`;
+                li.innerHTML = `<a class="page-link" href="#">${i}</a>`;
+                li.onclick = (e) => { e.preventDefault(); loadHistory(i, currentSearch); };
+                ul.appendChild(li);
+            }
+        }
+
+        function searchHistory() {
+            const query = document.getElementById('searchInput').value;
+            loadHistory(1, query);
+        }
+
+        function deleteTask(id) {
+            if (!confirm('确定彻底移除该诊断任务及其推理轨迹吗？')) return;
+            fetch(`/api/tasks/${id}`, { method: 'DELETE' })
+                .then(() => loadHistory(currentPage, currentSearch));
+        }
+
+        function viewDetail(id) {
+            const modalElement = document.getElementById('detailModal');
+            const modal = new bootstrap.Modal(modalElement);
+            const terminal = document.getElementById('modalLogTerminal');
+            const statusContainer = document.getElementById('modalStatusContainer');
+            
+            terminal.innerHTML = '<div class="text-secondary small">Fetching execution traces...</div>';
+            document.getElementById('modalTaskId').innerText = id.substring(0, 8);
+            
+            fetch(`/api/tasks/${id}`)
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('modalDesc').innerText = data.task.description;
+                    statusContainer.innerHTML = `<span class="badge ${data.task.status === 'success' ? 'bg-success' : 'bg-primary'} rounded-pill">${data.task.status.toUpperCase()}</span>`;
+                    terminal.innerHTML = '';
+                    data.traces.forEach(trace => appendLog(trace.type, trace.content, 'modalLogTerminal'));
+                });
+            modal.show();
+        }
+
+        document.getElementById('taskForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const desc = document.getElementById('problemDesc').value;
+            if (!desc) return;
+            document.getElementById('submitBtn').disabled = true;
+            
+            // 使用 classList 切换显示，防止 d-flex 冲突
+            document.getElementById('welcomeGuide').classList.add('d-none');
+            document.getElementById('statusCard').classList.remove('d-none');
+            
+            document.getElementById('logTerminal').innerHTML = '<div class="text-secondary small">Initializing Agent session...</div>';
+            document.getElementById('finalReport').style.display = 'none';
+
+            fetch('/api/tasks', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ description: desc })
+            })
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('displayTaskId').innerText = data.task_id.substring(0, 8);
+                connectSSE(data.task_id);
+            });
+        });
+
+        function connectSSE(taskId) {
+            const eventSource = new EventSource(`/api/tasks/${taskId}/stream`);
+            const terminal = document.getElementById('logTerminal');
+            eventSource.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                appendLog(data.type, data.content);
+                if (data.type === 'final') {
+                    eventSource.close();
+                    document.getElementById('submitBtn').disabled = false;
+                    document.getElementById('taskStatus').innerText = 'SUCCESS';
+                    document.getElementById('taskStatus').classList.replace('bg-primary', 'bg-success');
+                    document.getElementById('finalReport').style.display = 'block';
+                    document.getElementById('reportContent').innerText = data.content;
+                }
+            };
+        }
+
+        function appendLog(type, content, targetId = 'logTerminal') {
+            const terminal = document.getElementById(targetId);
+            const div = document.createElement('div');
+            div.className = 'mb-2';
+            let icon = 'bi-info-circle';
+            let color = 'text-white-50';
+            if (type === 'thought') { icon = 'bi-cpu-fill'; color = 'text-info'; }
+            else if (type === 'action') { icon = 'bi-wrench-adjustable-circle'; color = 'text-warning'; }
+            else if (type === 'observation') { icon = 'bi-eye-fill'; color = 'text-white'; }
+            else if (type === 'final') { icon = 'bi-flag-fill'; color = 'text-success'; }
+            div.innerHTML = `<span class="${color} small fw-bold"><i class="bi ${icon} me-2"></i>${type.toUpperCase()}</span><br><span class="ps-4 text-break">${content}</span>`;
+            terminal.appendChild(div);
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+    </script>
+</body>
+</html>

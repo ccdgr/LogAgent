@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+
+# Build output
+dist/
+build/
+frontend/dist/
+backend/server
+backend/tmp/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+
+# Gos
+go.sum
+logagent
+
+# Temp files
+tmp/
+*.tmp
+*.bak
+
+# AI
+.claude/
+.gemini/
+.skills/
+GEMINI.md
+CLAUDE.md
+docs/
